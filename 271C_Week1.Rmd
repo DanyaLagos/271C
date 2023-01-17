@@ -1,0 +1,959 @@
+---
+title: 'Week 1: Regression with Uncertainty'
+author: "Danya Lagos, SOC 271C"
+date: "17 January 2023"
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(haven)
+library(qss)
+library(scales)
+library(broom)
+library(stargazer)
+data("social", package = "qss") 
+data("minwage", package = "qss")
+data("food", package = "PoEdata")
+data("women", package = "qss")
+data("MPs", package = "qss")
+```
+
+## Outline 
+12PM-12:10PM - Berkeley Time  
+12:10PM-12:30PM - Introductions, Syllabus Review  
+12:20PM-1PM - Regression with Uncertainty  
+1PM-1:10PM - Break   
+1:10PM - 1:20PM - Review of Multiple Regression
+1:20PM-1:35PM - Seven Basic Principles of Statistical Writing  
+1:35PM-1:55PM - Sociological Exemplar: Rosenfeld 2015
+1:55PM-2PM - Q&A  
+
+## Key Terms 
+
+- Data-Generating Process
+
+- Exogeneity Assumption   
+
+- Unobserved Confounders  
+
+- Homoskedasticity
+
+- Dummy Variables
+
+## Review of Linear Regression (OLS)
+
+Recall the Ordinary Least Squares Model:   
+
+$Y = \alpha + \beta X + \epsilon$
+
+- Y is the outcome ("response" or "dependent") 
+- X is a predictor ("explanatory" or "independent") variable
+- $\epsilon$ is the error (or "disturbance") term
+- $\alpha$ is the Intercept
+- $\beta$ is the Slope, or increase in average outcome associated with a one-unit increase in the predictor
+
+
+## Example 1: Years of Schooling 
+
+Are respondents' total years of schooling associated with their fathers' total years of schooling?  
+
+Y = respondent's total years of schooling (RYS)  
+
+X = father's total years of schooling (FYS)  
+
+
+$RYS = \alpha + \beta(FYS)$  
+
+## Example 1: Looking at Data
+
+
+`rys` = respondent's years of schooling  
+
+`fys` = father's years of schooling  
+
+`sibs` = number of siblings 
+
+\small
+```{r echo=TRUE}
+## read in csv file with hypothetical data
+hypo <- read.csv("hypo.csv")
+## look at the first few observations in the data
+head(hypo)
+```
+
+(Adapted from Treiman, Chapters 5-6)
+
+## Example 1: Plotting Data
+
+```{r echo=TRUE, fig.width=2,fig.height=2}
+## plot the two variables in a two-dimensional space
+ggplot(hypo, aes(x = fys, y= rys)) + 
+  geom_point() + 
+  labs(x = "Father's Education", 
+       y = "Respondent's Education") +
+  xlim(0,13) +
+  ylim(0,13)
+```
+
+## Example 1: Fitting a Linear Model
+
+```{r, echo = TRUE}
+## fit a linear regression model 
+fit <- lm(rys ~ fys, data = hypo)
+fit
+```
+
+Interpret this as:
+
+$\hat{RYS}$ = `r round(fit$coefficients[1], 2)` + `r round(fit$coefficients[2],2)`$\hat{(FYS)}$
+
+Where $\alpha$ = `r round(fit$coefficients[1], 2)` (predicted RYS at FYS value of 0), and $\beta$ = `r round(fit$coefficients[2], 2)` (predicted increase in RYS per one unit increase in FYS)
+
+## Example 1: Fitting a Regression Line
+
+```{r, fig.width=2.5,fig.height=2.5}
+## repeat plot 
+ggplot(hypo, aes(x = fys, y= rys)) + 
+  geom_point() + 
+  ## add regression line
+  geom_smooth(method = "lm", se = FALSE, fullrange = TRUE) +
+  labs(x = "Father's Education", 
+       y = "Respondent's Education") +
+  xlim(0,13) +
+  ylim(0,13) 
+```
+
+Where $\alpha$ = `r round(fit$coefficients[1], 2)` (predicted RYS at FYS value of 0), and $\beta$ = `r round(fit$coefficients[2], 2)` (predicted increase in RYS per one unit increase in FYS)
+
+## Example 1: Predicted Values and Residuals
+
+Regression line consists of **predicted values** of Y. **Residuals** are the differences between predicted value of response variable and observed value of response variable. 
+
+\tiny
+```{r, echo = TRUE}
+library(modelr)
+
+hypo_fit <- hypo %>%
+  add_predictions(fit) %>%
+  add_residuals(fit)
+
+hypo_fit
+```
+
+## Example 1: Residuals
+
+For example, predicted value for someone with father with `r round(hypo_fit$fys[7], 2)` years of education is `r round(hypo_fit$pred[7], 2)` years. Observed value of `r round(hypo_fit$rys[7], 2)` years of respondent education is off by `r round(hypo_fit$resid[7], 2)`, (the residual).
+
+```{r, fig.width=2,fig.height=2}
+## repeat plot 
+ggplot(hypo, aes(x = fys, y= rys)) + 
+  geom_point() + 
+  ## add regression line
+  geom_smooth(method = "lm", se = FALSE, fullrange = TRUE) +
+  labs(x = "Father's Education", 
+       y = "Respondent's Education") +
+  xlim(0,13) +
+  ylim(0,13) +
+  geom_segment(x = 8, xend = 8, y = 13, yend = 8.83, linetype = "dashed", color = "red")
+```
+
+## Example 2: Randomized Controlled Trial 
+
+Linear regression can generate unbiased estimates of a Randomized Controlled Trial (RCT) when the treatments are binary. In example below, there are three treatment conditions: Civic Duty, Hawthorne Effect, and Neighbors. Linear model below gives us the average outcome within each group. 
+
+\tiny
+```{r, echo = TRUE}
+fit <- lm(primary2006 ~ -1 + messages, data = social)
+fit
+```
+
+\normalsize
+(QSS Ch. 4.4)
+
+## Linear Regression as a Generative Model 
+
+Another perspective on linear regression, is that it is an approximation of a **data-generating process**: A process in the real world that causes the observed distribution of data. 
+
+This allows us to quantify the uncertainty of our estimates over repeated hypothetical sampling from the specified generative model. 
+
+## The Importance of the Error Term
+
+Take a linear model with _p_ predictors:  
+$Y_i = \alpha + \beta X_{i1} + \beta X_{i2} + ... + \beta_{p}X_{ip} + \epsilon_i$
+
+The outcome (Y) is generated as a linear function of the explanatory variables plus the error term ($\epsilon_{i}$). In this model, the only variable we do not directly observe is the error term. The main assumption we make in the model is thus how $\epsilon_{i}$ is distributed.
+
+## Exogeneity Assumption
+
+In forming linear models as approximations of data-generating processes, we assume that unobserved determinants of $Y_i$ contained in $\epsilon_i$ are not related to observed predictors. 
+
+For example: In a model predicting whether there will be a baseball game on any given day, rain could factor in as a main predictor: 
+
+$Game_i = \alpha + \beta(Rain)_{i} + \epsilon_i$
+
+Under the exogeneity assumption, we assume that whatever is left in the error term is not related to whether it rains. For example, the scheduling of a baseball game does not change whether it rains. 
+
+## Exogeneity Assumption in RCTs
+
+In randomized controlled trials, no violation of exogeneity, since the treatment is randomly assigned, and therefore statistically independent of $\epsilon$.
+
+For example, in QSS 4.4, we looked at random assignment of women to local government in India and how it influenced the number of water facilities in a given locality. 
+
+$Water_i = \alpha + \beta(WomanLeader) + \epsilon_i$
+
+Here, because woman leader is randomly assigned, we can assume that there is no relationship between the error term and the treatment. 
+
+## Exogeneity Assumption in Observational Studies 
+
+In observational studies, the exogeneity assumption may be violated. 
+
+Say women leaders were not randomly assigned, but the outcome depended on whether the locality had a woman leader: 
+
+$Water_i = \alpha + \beta(WomanLeader) + \epsilon_i$
+
+In this example is possible that $\epsilon_i$ contains things that are related to there being a woman leader, such as level of education of the locality, cultural norms, etc. Factors that violate the exogeneity assumption are known as **unobserved confounders**.
+
+## Addressing Exogeneity in Observational Studies 
+
+**Method 1**: Compare similar units where there are no unobserved factors that influence the outcome. 
+
+**Method 2** Measure confounders and include htem as additional predictors.  
+- This is functionally the same as comparing treated and control units with similar characteristics. 
+
+## Example 3: Minimum Wage and Employment 
+
+Researchers chose fast-food restaurants in PA and NJ because patterns of employment were similar.
+
+\small
+```{r, echo = TRUE}
+## compute prop of full employment before minimum wage increase 
+## same thing after minimum wage increase 
+## an indicator for NJ: 1 if it's located in NJ and 0 if in PA 
+
+minwage <- minwage %>%
+  mutate(fullPropBefore = fullBefore / (fullBefore + partBefore),
+         fullPropAfter = fullAfter /(fullAfter + partAfter),
+         NJ = if_else(location == "PA", 0,1))
+```
+
+## Example 3: Regression 
+
+Removing the intercept by adding `-1` to model allows us to create an indicator variable for each of the four restaurant chains. 
+
+\tiny
+```{r, echo = TRUE}
+fit_minwage <- lm(fullPropAfter ~ -1 + NJ + fullPropBefore + wageBefore + chain, data = minwage)
+
+## regression result
+fit_minwage
+```
+
+\normalsize 
+Result shows that minimum wage increase in NJ raised the proportion of full-time employees by `r label_percent(accuracy = 0.1, suffix = " percent")(fit_minwage$coefficient[1])` after you adjust for the proportion of full employees, wages before the minimum wage increase, as well as the chains of fast-food restaurants. 
+
+## Unbiasedness of Estimated Coefficients
+
+Under the exogeneity assumption, the coefficients $\hat{\alpha}$ and $\hat{\beta}$ are unbiased for their corresponding true values $\alpha$ and $\beta$. This means that if we generate the data according to this linear model, the least squares estimates of the coefficients will equal their true values on average across the hypotheticall repeated datasets. 
+
+## Standard Errors of Estimated Coefficients
+
+The standard error quantifies the average variability of the estimated coefficient over this repeated sampling procedure.  
+
+We assume **homoskedasticity** of the error term, or that $\epsilon_i$ is independent of any other observation, and that the variance of $\epsilon_i$ does not depend on the predictor _X_.
+
+If the assumption of homoskedastic errors is violated (aka heteroskedasticity), then we need to adjust how we calculate the standard errors (more on this later). 
+
+## Example 4: Income and Food Expenditures
+
+\small
+The easiest way to spot **heteroskedasticity** is visually. Consider the following example looking at the relationship between income and food expenditures: Higher income respondents have way more variance than lower income respondents. 
+
+```{r, echo = FALSE, fig.width = 2.5, fig.height = 2.5}
+ggplot(food, aes(x = income, y = food_exp)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE, fullrange = TRUE) +
+    labs(x = "Income", 
+       y = "Food Expenditure") 
+```
+
+## Inference About Coefficients
+
+Given assumption of homoskedastic standard errors, we conduct a hypothesis test for the slope coefficient. Usually, we test the null hypothesis that the true coefficient for the predictor _x_ is equal to zero, i.e. $\beta^* = 0$. The * indicates a particular value of $\beta$, which in this case is 0. 
+
+The null hypothesis is $H_0: \beta = \beta^*$. The test statistic is the z-score, i.e., $z^* = (\hat{\beta} - \beta^*)$.
+
+There are $n - 2$ degrees of freedom in this case, since two parameters, $\alpha$ and $\beta$ are estimated from the data. 
+
+
+## Example 5: Women as Policy-Makers in India
+
+\small
+```{r, echo = TRUE}
+## fit the model
+fit_women <- lm(water ~ reserved, data = women)
+## view the coefficients
+tidy(fit_women)
+```
+
+When we regress number of water facilities (`water`) on spots in local government randomly assigned to women (`reserved`), we find that the point estimate of the slope coefficient is `r round(tidy(fit_women)$estimate[2], 2)`, and its standard error is `r round(tidy(fit_women)$std.error[2], 2)`. This output uses a conservative confidence interval based on Student's _t_-distribution (`r round(tidy(fit_women)$statistic[2], 2)`), and p-value is `r round(tidy(fit_women)$p.value[2], 2)`. Therefore, using the $(1-\alpha) = 0.95$ level of statistical significance, we reject the null hypothesis that the slope coefficient is zero. 
+
+## Example 5: Adding Confidence Interals to `tidy` Regression Output
+
+\tiny
+```{r, echo = TRUE}
+## display confidence intervals
+tidy(fit_women, conf.int = TRUE)
+```
+
+\normalsize
+This result suggests that having the seat reserved for women is estimated to increase the number of drinking water facilities by `r round(tidy(fit_women, conf.int = TRUE)$estimate[2], 2)` facilities with a 95% confidence interval of [`r round(tidy(fit_women, conf.int = TRUE)$conf.low[2],2)`,`r round(tidy(fit_women, conf.int = TRUE)$conf.high[2],2)`]. As expected, we observe that the 95% confidence interval does not contain zero. 
+
+## Example 3, Revisited 
+You can also apply the `tidy` function to the output of multivariate regression: 
+
+\tiny
+```{r, ECHO = TRUE}
+tidy(fit_minwage, conf.int = TRUE)
+```
+
+\normalsize
+
+Again, the average effect of increasing minimum wage in NJ is estimated to be `r label_percent(accuracy = 0.1, suffix = " percent")(tidy(fit_minwage, conf.int = TRUE)$estimate[1])` with a standard error of `r label_percent(accuracy = 0.1, suffix = " percentage points")(tidy(fit_minwage, conf.int = TRUE)$std.error[1])`. The p-value is `r round(tidy(fit_minwage, conf.int = TRUE)$p.value[1],2)` and the 95% confidence intervals [`r round(tidy(fit_minwage, conf.int = TRUE)$conf.low[1],2)`,`r round(tidy(fit_minwage, conf.int = TRUE)$conf.high[1],2)`] cross zero. With this in mind, we fail to reject the null hypothesis that the average effect of the minimum wage increase is zero. 
+
+## Inference About Predictions
+
+Once we estimate a linear regression model, we can predict the outcome variable given the values of predictors in the model. We are interested in obtaining the standard error of the predicted value form the model when the predictor X takes a particular value x:  
+
+$\hat{Y} = \hat{\alpha} + \hat{\beta}x$.
+
+To derive the variance of the predicted value $\hat{Y}$, we must recognize that $\hat{\alpha}$ and $\hat{\beta}$ are possibly correlated with each other. 
+
+## Example 6: Impact of Election to Parliament on Personal Wealth
+
+Outcome: `ln.net`, or log net worth at time of death  
+Predictor: `margin`, or margin of victory
+
+\small
+```{r, echo = TRUE}
+## subset the data into two parties
+MPs_labour <- filter(MPs, party == "labour")
+MPs_tory <- filter(MPs, party == "tory")
+
+## two regressions for labour: negative and positive margin
+labour_fit1 <- lm(ln.net ~ margin, 
+                  data = filter(MPs_labour, margin < 0))
+labour_fit2 <- lm(ln.net ~ margin, 
+                  data = filter(MPs_labour, margin > 0))
+
+## two regressions for tory: negative and positive margin
+tory_fit1 <- lm(ln.net ~ margin, 
+                  data = filter(MPs_tory, margin < 0))
+tory_fit2 <- lm(ln.net ~ margin, 
+                  data = filter(MPs_tory, margin > 0))
+```
+
+
+## Example 6: Predictions at Threshold using `augment()`
+\small
+`augment()` returns models with fitted values, residuals, and other observation-level statistics. You can add confidence intervals to it using the `interval` and `conf.level` arguments: 
+
+\tiny
+```{r, echo = TRUE}
+## Tory Party: Prediction at Threshold
+tory_y0 <- augment(tory_fit1, newdata = tibble(margin = 0),
+                    interval = "confidence",
+                    conf.level = 0.95)
+tory_y0
+
+tory_y1 <- augment(tory_fit2, newdata = tibble(margin = 0),
+                   interval = "confidence",
+                   conf.level = 0.95)
+tory_y1
+```
+
+\small
+Predicted values are given by `.fitted` and lower and upper confidence bands are denoted by `.lower` and `.upper.`
+
+## Example 6: Compute Predictions for Each Range with `data_grid()`
+
+`data_grid()` builds a new dataset from existing data. Requires `modelr` package (already loaded earlier in presentation).
+
+\small
+```{r, echo = TRUE}
+## create data with the ranges of "margin" less than zero
+y1_range <- data_grid(filter(MPs_tory, margin <=0), margin)
+## add predictions and CIs
+tory_y0 <- augment(tory_fit1, newdata = y1_range,
+                   interval = "confidence")
+
+## create the data with the ranges of "margin" greater than zero
+y2_range <- data_grid(filter(MPs_tory, margin >=0), margin)
+## add predictions and CIs
+tory_y1 <- augment(tory_fit2, newdata = y2_range,
+                   interval = "confidence")
+```
+
+## Example 6: What Did We Do with `data_grid()`? 
+```{r, echo = TRUE}
+y2_range
+```
+
+## Example 6: What Did We Do with `augment()`? 
+```{r, echo = TRUE}
+tory_y1
+```
+
+## Example 6: Plotting Results
+
+`geom_ribbon()` will plot the confidence intervals
+
+\tiny
+```{r, echo = TRUE, fig.width = 2, fig.height = 2}
+ggplot() + 
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  ## plot losers
+  geom_ribbon(aes(x = margin, ymin = .lower, ymax = .upper),
+              data = tory_y0, alpha = 0.3) +
+  geom_line(aes(x = margin, y = .fitted), data = tory_y0) +
+  ## plot winners
+  geom_ribbon(aes(x = margin, ymin = .lower, ymax = .upper),
+              data = tory_y1, alpha = 0.3) +
+  geom_line(aes(x = margin, y = .fitted), data = tory_y1) +
+  xlim(-.5,.25) + 
+  labs(x = "Margin of Victory", y = "log net wealth")
+```
+
+## Example 6: Interpreting Plot
+
+Width of confidence interval widens as it moves away from the mean value of the predictor. What we would like to do is compute the confidence interval for the difference between these two predicted values, since difference represents estimated ATE at the threshold under the regression discontinuity design. 
+
+```{r, fig.height = 2, fig.width = 2}
+ggplot() + 
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  ## plot losers
+  geom_ribbon(aes(x = margin, ymin = .lower, ymax = .upper),
+              data = tory_y0, alpha = 0.3) +
+  geom_line(aes(x = margin, y = .fitted), data = tory_y0) +
+  ## plot winners
+  geom_ribbon(aes(x = margin, ymin = .lower, ymax = .upper),
+              data = tory_y1, alpha = 0.3) +
+  geom_line(aes(x = margin, y = .fitted), data = tory_y1) +
+  xlim(-.5,.25) + 
+  labs(x = "Margin of Victory", y = "log net wealth")
+```
+
+## Example 6: Standard Errors of Predicted Values
+
+Because the two predicted values are assumed to be independent, the variance of the difference is the sum of two variances: 
+
+Standard Error of $(\hat{Y_1} - \hat{Y_0})$ = $\sqrt{(SE of  \hat{Y_1})^2 + (SEof\hat{Y_0})^2}$
+
+## Example 6: `se_fit` argument
+
+`se_fit` argument in `augment() can be used to obtain standard error of predicted value. 
+
+\tiny
+```{r, echo = TRUE}
+## predictions at threshold with se 
+tory_y0 <- augment(tory_fit1, newdata = tibble(margin = 0),
+                   interval = "confidence",
+                   se_fit = TRUE)
+
+tory_y0
+
+tory_y1 <- augment(tory_fit2, newdata = tibble(margin = 0),
+                   interval = "confidence",
+                   se_fit = TRUE)
+
+tory_y1
+```
+
+## Example 6: Compare to Regression Output 
+
+```{r, echo = TRUE}
+tidy(tory_fit2)
+```
+
+Predicted value equals the estimated intercept. Therefore, the standard error one obtains through `augment()` is equal to the standard error of the intercept in the summary output. 
+
+## Example 6: Hypothesis Testing
+
+\tiny
+```{r, echo = TRUE}
+##standard error
+se_diff <- sqrt(tory_y0$.se.fit ^ 2 + tory_y1$.se.fit ^2)
+se_diff
+
+## point estimate
+diff_est <- tory_y1$.fitted - tory_y0$.fitted
+diff_est
+
+## confidence interval 
+CI <- c(diff_est - se_diff * qnorm(0.975),
+        diff_est - se_diff * qnorm(0.975))
+CI
+
+## hypothesis test
+z_score <- diff_est / se_diff
+## two-sided p-value
+p_value <- 2 * pnorm(abs(z_score), lower.tail = FALSE)
+p_value
+```
+
+\small 
+Average effect of winning an election is estimated to be `r round(diff_est, 2)` with a CI of `r round(CI, 2)`. P-value is `r round(p_value, 2)`. We reject the null hypothesis. 
+
+## Break 
+
+10 minutes
+
+## Review of Multiple Regression
+
+Recall our data from Example 1: 
+
+`rys` = respondent's years of schooling  
+
+`fys` = father's years of schooling  
+
+`sibs` = number of siblings 
+
+\small
+```{r echo=TRUE}
+## read in csv file with hypothetical data
+hypo <- read.csv("hypo.csv")
+## look at the first few observations in the data
+head(hypo)
+```
+
+## Example 7: Father's Education, or Siblings? 
+What if we wanted to account for the possible unexplained variance in respondent's schooling that is not explained by father's education? Adding another potential factor can help us ajudicate between competing explanations. The more siblings one has, the less attention one might receive from one's parents, and the less well they might do in school. 
+
+Model: $\hat{RYS} = \alpha + \beta(FYS) + \beta(S)$
+
+## Example 7: Fitting a Linear Model 
+
+
+\small
+```{r, echo = TRUE}
+fit_sib <- lm(rys ~ fys + sibs, data = hypo)
+fit_sib
+```
+
+\normalsize
+In multiple regression, the coefficients associated with each variable measure the expected difference in the dependent variable asosociated with a one-unit difference in the given independent variable **holding constant each of the other independent variables.**
+
+## Example 7: Making Sense of Multiple Regression Coefficients
+
+\tiny
+```{r}
+fit_sib
+```
+
+\normalsize
+
+$\hat{RYS} =$ `r round(fit_sib$coefficients[1],3)` + `r round(fit_sib$coefficients[2],3)`(FYS) + `r round(fit_sib$coefficients[3],3)`(S)  
+
+This equation tells us that someone with no siblings, and whose father has no education is expected to have 6.26 years of schooling. Among people whose fathers have the same level of education, each additional sibling is associated with a decrease of nearly two-thirds of a year of education (`r round(fit_sib$coefficients[3],3)`). Among those with the same number of siblings, each year of a father's education is associated with an increase of a little over half a year (`r round(fit_sib$coefficients[2],3)`)
+
+## Example 7: Hypothetical People 
+You can store your coefficients in R, which makes it easier to manipulate and calculate some predicted values. Here we store the coefficients, and fit the model to two hypothetical people. Person 1 has a father with eight years of schooling and two siblings. Person 2 has a father with seven years of schooling and seven siblings.  
+
+\tiny
+```{r, echo = TRUE}
+## store coefficients
+fit_sib_intercept <- fit_sib$coefficients[1]
+fit_sib_fys_slope  <- fit_sib$coefficients[2]
+fit_sib_sib_slope <- fit_sib$coefficients[3]
+
+rys1 <- fit_sib_intercept + fit_sib_fys_slope*(8) + fit_sib_sib_slope*(2)
+rys2 <- fit_sib_intercept + fit_sib_fys_slope*(7) + fit_sib_sib_slope*(7)
+
+rys1
+rys2
+```
+
+## Example 7: Comparing Two Models: 
+
+Using `stargazer()` we can fit the new model, along with the original model from Example 1 on a nicely formatted, ever-customizable table: 
+
+\tiny
+```{r results = 'asis', echo = FALSE}
+## re-fit original model 
+fit_fys <- lm(rys ~ fys, data = hypo)
+
+## use 
+stargazer(fit_fys, fit_sib,
+          title = "Respondent Years of School Regressed on Father's Education and Number of Siblings",
+          covariate.labels = c("Father's Years of Schooling", "Number of Siblings"),
+          dep.var.labels = "Respondent Years of Schooling",
+          column.labels = c("Example 1", "Example 7"),
+          header = FALSE,
+          keep.stat = c("rsq","n"))
+```
+
+## A Note on Standardized Coefficients
+
+* We cannot directly compare coefficients of distinct independent variables  (e.g. years of schooling, number of siblings), because they are typically measured differently.  
+* To compare the coefficients, you can **standardize** the variables. This can be useful to assess the relative effect size of different factors in determining outcome, but **this is not recommended if you are comparing across different populations.**  
+
+## Standardized Coefficients with `lm.beta`
+In `R`, you can use the `lm.beta` package to produce standardized coefficients of stored models estimated with the `lm()` function: 
+
+\tiny
+```{r, echo = TRUE}
+library(lm.beta)
+fit_sib_std <- lm.beta(fit_sib)
+tidy(fit_sib_std)
+```
+
+\normalsize
+
+* These estimates are **unitless**, and refer to how many standard deviations a dependent variable will change per standard deviation increase in dependent variable.
+
+
+## Writing About Multivariate Analysis 
+
+This semester, we will be complementing our learning about how to perform statistical analyses with guidance on how to write about them, largely taken from Jane E. Miller's _Chicago Guide to Writing About Multivariate Analysis (Second Edition)_
+
+## Principle #1: Establishing Context 
+
+Establish the W's: "Who, What, When, and Where" when introducing numbers. 
+
+Example: "Of the nearly 2 million individuals currently incarcerated, roughtly 95% will be released, with more than a half a million being released each year (Slevin 2000). According to one estimate, there are currently over 12 million ex-felons in the United States, representing roughly 8% of the working-age population (Uggen, Thompson, and Manza 2000)."  
+(Pager 2003, "The Mark of a Criminal Record," _AJS_)
+
+## Principle #2: Picking Simple, Plausible Examples
+
+Main goal of an example is to provide background information that establishes the importance and implications of the results. 
+
+Example: "Over the past three decades, the number of prison inmates in the United States has increased by more than 600%, leaving it the country with the highest incarceration rate in the world."   
+(Pager 2003, "The Mark of a Criminal Record," _AJS_)
+
+- Simplicity: The fewer terms you have to define along the way, the easier it is to understand. 
+
+- Plausibility: The differences between groups or changes should be feasible. 
+
+## Principle #3: Picking the Right Tool for the Job
+
+Make conscious decisions about which form of presenting quantitative information is most effective. When is it more compelling to show a plot? When is it more effective to write it out in prose? When is a table useful? 
+
+Usually, there will be a  mix of *tables*, *charts*, and *prose*. Generally, better to not duplicate information that you present in a table in a chart, or vice versa. Sometimes you can include the other version, if requested, in an *Appendix.*
+
+## Principle #4: Define Your Terms (and Watch for Jargon)
+
+Always write with a sense of the audience you are writing for. When you're preparing an article for an academic journal, you can dispense with certain definitions of terms but not others. The best way to get a sense of what is conventionally understood is by *reading a lot of academic articles*, particularly those from journals you would like to submit to someday. 
+
+Generally, with an abbreviation, you want to always explain what it stands for at least once. 
+
+## Principle #5: Report _and_ Interpret 
+
+You can include the raw numbers in the text, table, or chart. That's called reporting. But you also want to interpret the meaning behind them.
+
+* Reporting: "In 1998, total expenditures on health care in the United States were estimated to be more than $1.1 trillion (Centers for Medicare and Medicaid Services 2004)." 
+
+* Interpreting: "Between 1990 and 1998, the total costs of health care in the United States rose to \$1,150 billion from \$699 billion - an increase of 65%. Over that same period, the share of gross domestic product (GDP) spent for health care increased to 13.1% from 12.0% (Centers for Medicare and Medicaid Services 2004)."
+
+## Principle #6: Specify Direction and Magnitude of an Association
+
+Variables can have a **positive** or **negative** assocation with one another. 
+
+An association can be large or small. It's good to quantify the association, since that is what we are doing when we estimate models and compare trends. For comparisons between groups, you can make comparisons of **higher** or **lower** / **smaller** or **larger**.
+
+* Bad Example: "Mortality and age are correlated"
+* Good Example: "Among the elderly, mortality roughly doubles for each successive five-year age group."
+* Another Good Example: "The effect of a criminal record is thus 40% larger for blacks than for whites" (Pager 2003, _AJS_)
+
+## Principle # 7: Summarize Patterns
+
+Paint the big picture. The following "GEE" formula is a great way to report on interactions in a model, for instance. 
+
+* Generalization: Description that characteristic that characterizes a relatinship among most, if not all, of the numbers. 
+
+* Example: Illustrate it with numbers from your table or chart. 
+
+* Exception: If there is variation in your data, you can address it and explain how it differs from the generalization you have described and illustrated in your preceding sentences. 
+
+## Sociological Exemplar
+
+Rosenfeld, Michael J. 2015. "Revisiting the Data from the New Family Structure Study: Taking Family Instability Into Account." _Sociological Science_ 2, 478-501
+
+* Professor, Stanford University 
+* PhD 1991, University of Chicago 
+* Studies social change, mating, dating, and divorce
+
+## Abstract
+
+This analysis revisits recent controversial findings about children of gay and lesbian parents, and shows that family instability explains most of the negative outcomes that had been attributed to gay and lesbian parents. Family transitions associated with parental loss of custody were more common than breakups of same-sex couples among family transitions experienced by subjects who ever lived with same-sex couples. The analyses also show that most associations between growing up with a single mother and later negative outcomes are mediated by childhood family transitions. I show that many different types of childhood family transitions (including parental breakup and the arrival of a parent’s new partner) are similarly associated with later negative outcomes.
+
+## Research Question 
+
+Mark Regnerus published a series of controversial studies finding that children of gay and lesbian parents fare worse than children raised by "intact biological families." Do these findings change once you take into account the role of family transitions? 
+
+## Data: New Family Stability Structure Study (NFSS)
+
+* Collected by Mark Regnerus, Professor at University of Texas at Austin
+* Cross-Sectional, Nationally Representative Online Survey of U.S. recruited through Random-Digit Dialing and Addres-Based Sampling
+* Contains questions about family of origin and adult outcomes
+* Collected between late 2011 and early 2012. (Context: Same-sex Marriage was not legal in the United States until 2015)
+* 2,988 respondents aged 18-39
+
+Stored as `nfss.csv` in the files associated with this presentation. 
+
+## NFSS Codebook
+
+\tiny 
+
+ Name                             Description
+ -------------------------------- ----------------------------------------------------------
+ `depression`                     Scale ranges continuously from 1-4 with higher numbers indicating more symptoms of
+                                  depression, as measured by the CES-D depression index
+ `welfare`                        1 if currently on public assistance, 0 otherwise
+ `ibf`                            1 if lived in intact biological family, 0 otherwise
+ `lm`                             1 if mother had a same-sex romantic relationship, 0 otherwise
+ `gd`                             1 if father had a same-sex romantic relationship, 0 otherwise
+  `other`                         1 if neither IBF nor had parents with same-sex relationship, 0 otherwise
+  `age`                           Age in years
+  `female`                        1 if female; 0 otherwise
+  `educ_m`                        Mother's education level: `below hs`, `hs`, `some college` and `college and above`
+  `white`                         1 if non-Hispanic white; 0 otherwise
+  `foo_income`                    Respondent's estimate of income of family-of-origin while growing up
+                                  (categorical variable with 7 income categories)
+  `ytogether`                     Number of years respondent lived with both parent and his/her same-sex partner;
+                                  `NA` for respondents in `ibf` and `other`
+ `ftransition`                    Number of childhood family transitions
+ 
+## Model 1 from Regnerus 2012 
+
+**Outcome of Interest:** Depression scale ranges continuously from 1-4 with higher numbers indicating more symptoms of depression, as measured by the CES-D depression index
+
+**Main Predictor of Interest**: Family Structure. "Intact Biological Family" (`ibf`), mothers (`lm`) and fathers with same-sex relationships (`gd`), or with other relationships outside of biological family (`gd`)
+
+\small  
+```{r, echo = TRUE}
+nfss <- read.csv("nfss.csv")
+fit1 <- lm(depression ~ lm + gd + other, data = nfss)
+```
+
+## Comparing Between Categories 
+
+In order to fit categorical variables in a linear regression framework, they must be treated as dichotomous **dummy variables**.
+
+* $FS_1$ = 1 If the respondent is in an ``intact biological family," and = 0 otherwise
+* $FS_2$ = 1 If the respondent has a mom who had a same-sex romantic relationship, and = 0 otherwise
+* $FS_3$ = 1 If the respondent has a dad who had a same-sex romantic relationship, and = 0 otherwise 
+* $FS_4$ = 1 If the respondent has a parent with other relationships outside of biological family, and = 0 otherwise
+
+$\hat{D} = \alpha$ + $$\sum_{i = 2}^{4} \beta_i(FS) = \alpha + \beta_2(FS_2) + \beta_3(FS_3) + \beta_4(FS_4)$$
+
+## Reference Categories
+
+It is necessary to omit one category from regression to avoid a situation where any one independent variable is an exact function of other independent variables). While any of the variables can be used as a reference category, it is best to use the one that makes the most sense on substantive grounds. 
+
+```{r}
+fit1
+```
+
+## Interpreting the Output 
+
+* Estimated Equation: 
+$\hat{D} =$ `r round(fit1$coefficients[1],2)` + `r round(fit1$coefficients[2],2)`$(FS_2)$ +  `r round(fit1$coefficients[3],2)`$(FS_3)$ + `r round(fit1$coefficients[4],2)`$(FS_4)$  
+
+
+* For ```Intact Biological Families:  
+$\hat{D} = \alpha + \beta_2(0) + \beta_3(0) + \beta_4(0) = \alpha =$ `r round(fit1$coefficients[1],3)`  
+
+* For Families with Mother Who Had Same-Sex Relationship: 
+$\hat{D} = \alpha + \beta_2(1) + \beta_3(0) + \beta_4(0) =$ `r round(fit1$coefficients[1],3)` + `r round(fit1$coefficients[2],3)` = `r round((fit1$coefficients[1]+fit1$coefficients[2]),3)`
+
+* For Families with Father Who Had Same-Sex Relationship: 
+$\hat{D} = \alpha + \beta_2(0) + \beta_3(1) + \beta_4(0) =$ `r round(fit1$coefficients[1],3)` + `r round(fit1$coefficients[3],3)` = `r round((fit1$coefficients[1]+fit1$coefficients[3]),3)`
+
+* For Families with Parent Who Had Other-Sex Relationship: 
+$\hat{D} = \alpha + \beta_2(0) + \beta_3(0) + \beta_4(1) =$ `r round(fit1$coefficients[1],3)` + `r round(fit1$coefficients[4],3)` = `r round((fit1$coefficients[1]+fit1$coefficients[4]),3)`
+
+## Writing up Regression Results in RMarkdown
+
+Enclosing your text in "backticks," or  \` \` tells RMarkdown to run code. The following code tells Markdown to run an r command and execute it within the text of what you are writing. 
+
+For example:
+
+\` r fit1$estimate[1] \`
+will produce `r tidy(fit1)$estimate[1]` (the intercept for the `fit1` model)
+
+## Rounding Regression Results in RMarkdown
+
+You can round the number to a particular decimal point by encasing the object with the `round()` function, specifying the number of decimal points:   
+\` r round(fit1\$coefficients[1],2) \` will produce `r round(fit1$coefficients[1],2)`
+
+\` r round(fit1\$coefficients[2],2) \` will produce `r round(fit1$coefficients[2],2)`
+
+This is helpful for writing up your results, since you can then easily write a sentence that says "The estimated level of depression for a respondent in an ``intact biological family" is `r round(fit1$coefficients[1],2)` on a scale from 1 to 4, with 4 indicating the most symptoms of depression. Being raised a  mother who had a same-sex romantic relationship was associated with a depression score higher by `r round(fit1$coefficients[2],2)` points."
+
+
+## Stored Results
+
+Say we wanted to talk about the difference between predicted values of someone in an "intact biological family" and someone whose mother was in a same-sex relationship. You can then calculate percentage differences:
+
+\tiny
+```{r, echo = TRUE}
+## Store the Coefficients
+ibf_alpha <- fit1$coefficients[1]
+lm_beta <- fit1$coefficients[2] 
+
+lm_predicted <- ibf_alpha + lm_beta
+
+## Calculate "Percentage Difference"
+pct_diff <- (lm_predicted - ibf_alpha) / (ibf_alpha) * 100
+
+pct_diff
+```
+
+\normalsize
+You could then automate the process of writing that estimated levels of depression for respondents with a mother who was in a same-sex relationship were `r round(pct_diff, 2)` higher than estimated levels of depression raised in an "intact biological family."
+
+
+## Predictions from Regnerus 2012, Model 1
+
+The `augment()` function will generate the predicted values, and confidence intervals. `.fitted` is the predicted value, `.lower` is the lower bound of the confidence interval, and `.upper` is the upper bound of the confidence interval. 
+
+\tiny
+```{r}
+augment(fit1, 
+        interval = "confidence",
+        se_fit = TRUE)
+```
+
+
+## Model 2 from Regnerus 2012
+
+
+
+Adding age, gender, mother's education, race (non-Hispanic white or not), and perceived family of origin income
+
+\tiny
+```{r, echo = TRUE}
+fit2 <- lm(depression ~ lm + gd + other + age + female + white + educ_m + foo_income, data = nfss)
+tidy(fit2)
+```
+
+## Model 3 from Rosenfeld 2015 
+
+Rosenfeld added number of family transitions someone had experienced in their childhood. 
+
+\tiny
+```{r, echo = TRUE}
+fit3 <- lm(depression ~ lm + gd + other + ftransition + age + female + white + educ_m + foo_income, 
+           data = nfss)
+tidy(fit3)
+```
+
+## Model 4: Interaction Between Family Category and Family Transition
+
+\tiny
+```{r}
+fit4 <- lm(depression ~ lm*ftransition + gd*ftransition + other*ftransition +  age + female + white + educ_m + foo_income, 
+           data = nfss)
+tidy(fit4)
+```
+
+
+## Fit Statistics
+\tiny
+```{r, echo = TRUE}
+summary(fit1)$r.squared
+summary(fit2)$r.squared
+summary(fit3)$r.squared
+summary(fit4)$r.squared
+```
+
+
+## Models in a `stargazer` table
+\tiny
+```{r, results = 'asis', echo = FALSE}
+stargazer(fit1, fit2, fit3, fit4, title = "Level of Depression Regressed on Family Structure",
+          column.labels = c("Regnerus 2012a", "Regnerus 2012b", "Rosenfeld 2015a"),
+          keep.stat = c("rsq","n"),
+          header = FALSE)
+```
+
+
+## Abbreviated `stargazer` Table
+\tiny
+```{r, results = 'asis', echo = FALSE}
+stargazer(fit1, fit2, fit3, fit4, title = "Level of Depression Regressed on Family Structure",
+          ci = TRUE,
+          column.labels = c("Regnerus 2012a", "Regnerus 2012b", "Rosenfeld 2015", "Interactions"),
+          keep.stat = c("rsq","n"),
+          header = FALSE,
+          omit = c("age", "female", "white", "ftransition:other",
+                   "educ_mcollege and above", "educ_mhs", "educ_msome college",
+                   "foo_income100 to 150K", "foo_income150 to 200K",
+                   "foo_income20 to 40K", "foo_income40 to 75K",
+                   "foo_income75 to 100K", "foo_incomeAbove 200K"))
+```
+
+## Next Week: Categorical Dependent Variables 
+
+* Read: Treiman, Chapter 13; Miller, Chapters 3-4
+
+## Example 8: Literacy and Cultural Capital
+
+```{r, echo = TRUE}
+china <- read_dta("china07_fixed.dta")
+```
+
+
+Data come from 1996 survey of China. Included short-form vocabulary test, in which respondents were asked to identify ten Chinese characters of varying degrees of difficulty. 
+
+\tiny
+
+Name        Description
+----------  ---------------------
+`wordsum`   Number of Chinese Characters Correctly Identified (10-item test)
+`educ_hiy`  Respondent's years of schooling
+`feduc_y`   Respondent's years of schooling
+`culcap`    Measure of "cultural capital" ranging from 0-1
+`nm`        Dummy variable for whether respondent works in a non-manual occupation
+`urban`     Dummy variable for whether respondent is rural or urban in origin
+`male`      Dummy variable for whether a respondent is male
+
+```{r}
+## quick cleaning of data 
+china <- china %>% 
+  mutate(urban = case_when(
+    nsize14 > 1 ~ 1,
+    nsize14 < 2 ~ 0
+  )) %>%
+  filter(educ_hiy > -1,
+         feduc_y > -1) 
+```
+
+
+
+## Activity: Fit 4 Models 
+
+Fit three models with`wordsum` as the outcome with the variables presented.
+* The first one should account for a component that you and your partner think has the most explanatory power. 
+* The second one should add a theoretically coherent set of variables that account for another component that you think also has more explanatory power. 
+* The third one should account for an interaction between two variables that makes some theoretical sense. 
+* The fourth model should account for all of the available variables. 
+
+```{r, echo = TRUE}
+#fit_lit1 <- 
+#fit_lit2 <- 
+#fit_lit3 <-
+#fit_lit4 <- 
+```
+
+## Compare in `stargazer`
+
+Put it all together in a customized `stargazer` table. 
+
+```{r, results = 'asis', echo = FALSE}
+#stargazer()
+```
+
+
